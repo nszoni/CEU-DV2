@@ -8,7 +8,7 @@ output:
     lightbox: true
     gallery: false
     highlight: tango
-    code_folding: hide
+    code_folding: show
 ---
 
 ```{r setup, include=FALSE}
@@ -17,7 +17,7 @@ knitr::opts_chunk$set(fig.align = "center", warning = FALSE, message = FALSE, fi
 
 ```
 
-```{r requirements}
+```{r requirements, echo = F}
 
 if (!require("pacman")) {
   install.packages("pacman")
@@ -90,14 +90,14 @@ merge(
 
 ```{r}
 
-ggplot(flight_data[arr_delay >= 20], aes(format(time_hour, "%B %Y"))) +
-  geom_bar(stat = 'count') +
+monthly <- flight_data[arr_delay >= 20, .(number_of_flights = .N), by=(date = as.Date(format(time_hour, '%Y-%m-01')))]
+
+ggplot(monthly, aes(date, number_of_flights)) +
+  geom_col() +
   labs(title = 'Monthly number of flights',
        x = 'Date',
        y = 'Number of flights') +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
+  theme_bw()
 
 ```
 
@@ -107,11 +107,11 @@ ggplot(flight_data[arr_delay >= 20], aes(format(time_hour, "%B %Y"))) +
 
 weather <- setDT(nycflights13::weather)
 
-weather <- weather[, .(mean_wind_speed = mean(wind_speed, na.rm = T)), by = .(date = as.Date(time_hour))]
+weather <- weather[, .(mean_wind_speed = mean(wind_speed, na.rm = T)), by = .(date = as.Date(time_hour), origin)]
 
 flight_data$date <- as.Date(flight_data$time_hour)
 
-all <- merge(flight_data, weather, by.x = 'date', by.y = 'date')
+all <- merge(flight_data, weather, by = c('date', 'origin'))
 
 
 ggplot(all[dest == 'IAH'], aes(dep_delay, mean_wind_speed)) +
@@ -139,7 +139,7 @@ ggplot() +
   geom_map(
     data = world, map = world,
     aes(long, lat, map_id = region),
-    color = "white", fill = "lightgray", size = 0.1
+    color = "black", fill = "lightgray", size = 0.1
   ) +
   geom_point(
     data = geolocations,
