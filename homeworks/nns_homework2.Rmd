@@ -1,0 +1,168 @@
+---
+title: "DV2 - Homework 2."
+author: "Son Nam Nguyen"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(fig.align = "center", warning = FALSE, message = FALSE, fig.width=6, fig.height=4) 
+
+```
+
+```{r}
+
+if (!require("pacman")) {
+  install.packages("pacman")
+}
+
+pacman::p_load(ggplot2, data.table, gganimate, tidygeocoder, ggmap, scatterpie)
+
+df <- data.table(readRDS('flats.rds'))
+
+```
+
+## Task 1
+
+```{r}
+
+ggplot(df, aes(Area)) +
+  geom_histogram(fill="#006D77", color="white", bins=40) +
+  labs(title = "Distribution of the Area of flats (m2)") +
+  theme_bw()
+
+```
+
+## Task 2
+
+```{r}
+
+ggplot(df[!is.na(df$Condition)], aes(Price)) +
+  geom_density(aes(fill = Condition), alpha = 0.4) +
+  labs(title = "Price distribution for flats in different conditions") +
+  theme_bw()
+
+```
+
+## Task 3
+
+```{r}
+
+ggplot(df[!is.na(df$Condition)]) +
+  geom_point(aes(Area, Price), alpha = 0.6) +
+  geom_smooth(aes(Area, Price, color=Condition), method = 'lm', se = F) +
+  labs(title = 'How the condition of the flats effects price to area') +
+  theme_bw()
+
+```
+
+## Task 4
+
+```{r}
+
+ggplot(df[, .(avg_price = mean(Price)), by = District], aes(as.factor(District), avg_price)) +
+  geom_col(fill="#006D77") +
+  labs(y = 'Average price',
+       x = 'Disctrict') +
+  theme_bw()
+
+```
+
+## Task 5
+
+```{r}
+
+ggplot(df, aes(as.factor(District), Price)) +
+  geom_boxplot(color="#006D77", fill="#66B7B0", alpha = 0.6) +
+  labs(x = "Disctrict") +
+  theme_bw()
+
+```
+
+## Task 6
+
+```{r}
+
+ggplot(df) +
+  geom_violin(aes(as.factor(District), Price), fill = "#66B7B0") +
+  labs(x = "District") +
+  theme_bw()
+
+```
+
+## Task 7
+
+```{r}
+
+ggplot(df, aes(Price)) +
+  geom_histogram(fill="#006D77", color="#66B7B0") +
+  theme_bw() +
+  transition_states(District) +
+  labs(title = paste("District {closest_state}"),
+       subtitle = "Number of flats: {nrow(subset(df, District == {closest_state}))} \n Mean price: {round(mean(subset(df, District == {closest_state})$Price))} Ft")
+
+```
+
+## Bonus exercises
+
+```{r}
+
+#compile address
+df[, address := paste(paste0(District,". Kerulet"), "Budapest", "Hungary", sep = ', ')]
+
+#split dataframe by district for batch processing
+district <- df$District
+splitdf <- split(df, district)
+
+#batch geocoding with rbindlist
+geocodes <- rbindlist(lapply(splitdf, function(x) tidygeocoder::geocode(x, 'address')))
+
+#get budapest map
+bbox <- c(bottom = 47.38, left = 18.92, top = 47.62, right = 19.30)
+
+map_background <- get_stamenmap(bbox, zoom = 12, maptype = c("toner-background"), color = c("color", "bw"))
+map_labels  <- get_stamenmap(bbox, zoom = 12, maptype = c("toner-labels"), color = c("color", "bw"))
+
+map <- ggmap(map_background) + inset_ggmap(map_labels)
+
+```
+
+```{r}
+
+#first figure with the number of flats
+map + 
+  geom_point(data = geocodes[, .N, by = .(lat, long)], aes(long, lat, size = N), color = 'orange') +
+  theme(legend.position = 'none',
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+```
+
+```{r}
+
+df1 <- geocodes[!is.na(Comfort_lev), .(District, .N), by = .(lat, long, Comfort_lev)]
+df2 <- dcast(df1, lat + long + District ~ Comfort_lev, value.var = "N")
+
+setcolorder(df2, c("very low", "low", "average", "high", "very high", "luxury"))
+map + geom_scatterpie(data = df2, 
+                      aes(long, lat),
+                      color=NA, 
+                      alpha = 0.7, 
+                      cols=c("very low", "low", "average", "high", "very high", "luxury"),
+                      pie_scale= 2)+
+        theme(legend.position= "top",
+              legend.direction = "horizontal",
+              axis.title = element_blank(),
+              axis.text =element_blank(),
+              axis.ticks =element_blank())+
+        guides(fill = guide_legend(nrow = 1, title="Comfort level"))
+
+```

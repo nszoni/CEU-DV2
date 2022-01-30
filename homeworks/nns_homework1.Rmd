@@ -107,19 +107,19 @@ ggplot(monthly, aes(date, number_of_flights)) +
 
 weather <- setDT(nycflights13::weather)
 
-weather <- weather[, .(mean_wind_speed = mean(wind_speed, na.rm = T)), by = .(date = as.Date(time_hour), origin)]
+weather <- weather[, .(mean_wind_speed = mean(wind_speed, na.rm = T)), by = .(year, month, day, origin)]
 
 flight_data$date <- as.Date(flight_data$time_hour)
 
-all <- merge(flight_data, weather, by = c('date', 'origin'))
+all <- merge(flight_data, weather, by = c('year', 'month', 'day', 'origin'))
 
 
 ggplot(all[dest == 'IAH'], aes(dep_delay, mean_wind_speed)) +
   geom_point() +
   geom_smooth(method = 'lm') +
   labs(title = 'Realtionship between departure delay and wind speed',
-       x = 'Daily mean wind speed',
-       y = 'Departure delay') +
+       y = 'Daily mean wind speed',
+       x = 'Departure delay') +
   theme_bw()
 
 
@@ -129,7 +129,7 @@ ggplot(all[dest == 'IAH'], aes(dep_delay, mean_wind_speed)) +
 
 ```{r}
 
-flights <- flight_data[, .(number_of_flights = .N), by = 'dest']
+flights <- flight_data[, .(flights = .N), by = 'dest']
 
 geolocations <- merge(flights, airports, by.x = 'dest', by.y = 'faa')
 
@@ -139,11 +139,11 @@ ggplot() +
   geom_map(
     data = world, map = world,
     aes(long, lat, map_id = region),
-    color = "black", fill = "lightgray", size = 0.1
+    color = "black", fill = "lightgray", size = 0.3
   ) +
   geom_point(
     data = geolocations,
-    aes(lon, lat, size = number_of_flights),
+    aes(lon, lat, size = flights),
     alpha = 0.7
   ) +
   theme(legend.position = 'top') +

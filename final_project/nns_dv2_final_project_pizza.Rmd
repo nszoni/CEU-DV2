@@ -1,0 +1,282 @@
+---
+title: "US Pizza Analysis"
+author: "Son Nam Nguyen"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  rmarkdown::html_document:
+    theme: lumen
+    toc: true
+---
+
+> This work is published [here](https://rpubs.com/nszoni/us-pizza) on RPubs
+
+*Note: The work is aiming the A grade by satisfying all the necessary requirements*
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(fig.align = "center", warning = FALSE, message = FALSE, fig.width=10, fig.height=5) 
+
+```
+
+# Introduction
+
+I have picked the Pizza reviews dataset from the [TidyTuesday Project Repo](https://github.com/rfordatascience/tidytuesday) since it got all the data types needed for a full-fledged visualization.
+
+The purpose of this publication is to show some of the endless amounts of visualization techniques and packages you can use whether it is spatial, categorical, or numerical.
+
+## Setup
+
+I have been using the `pacman` package to load dependencies for a while now. It makes packages work out of the box as it executes both the install and library command. This way, the project is more portable and does not re-install the packages if they already exist.
+
+```{r requirements}
+
+if (!require("pacman")) {
+  install.packages("pacman")
+}
+
+pacman::p_load(tidyverse, data.table, kableExtra, leaflet, ggpubr, gganimate, magick)
+
+#read logo
+logo <- image_read("Pizza.svg")
+
+```
+
+## Data Sources
+
+Throughout the analysis, I have used the following two resources:
+
+1. The `pizza_barstool` dataset has critic, public, and the Barstool Staff's rating as well as pricing, location, and geo-location. I have used it extensively on comparing review habits and ranking restaurants based on pizza scores.
+
+2. The `pizza_datafiniti` is a more elaborate data source strongly focused on geolocations. This includes 10000 pizza places, their price ranges as well. Spatial and price visualizations leveraged this particular dataset.
+
+## Get Data
+
+To get the data, I just needed to check the `README` section of the TidyTuesday submission which provided scripts for loading the already cleaned data. How easy is that! I only changed the bit where I convert the sources to data tables because I plan to do ad-hoc transformations with the `data.table` syntax.
+
+```{r}
+
+pizza_barstool <- as.data.table(readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-10-01/pizza_barstool.csv"))
+pizza_datafiniti <- as.data.table(readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-10-01/pizza_datafiniti.csv"))
+
+```
+
+## Define Custom Theme
+
+To make shortcuts and keep consistency between the different figures I plan to show you, I have defined a personal theme for myself. It is a good practice to do so in a function so that your code is as DRY as it can be. Otherwise, you would repeat the same theme component definitions over and over again independently from the data. I have not included the customization of legend elements in the theme definition as I wanted to keep that flexible.
+
+
+```{r}
+
+theme_nszoni <- function(){ 
+    font <- "serif"   #assign font family up front
+    
+    theme_minimal() %+replace%    #replace elements we want to change
+    
+    theme(
+      
+      #grid elements
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.background = element_blank(),
+      axis.ticks = element_blank(),       
+      
+      #text elements
+      plot.title = element_text(             
+                   family = font,            
+                   size = 15,                
+                   face = 'bold',            
+                   hjust = 0.5,                
+                   vjust = 2,
+                   color = "#2ca25f"),               
+  
+      plot.subtitle = element_text(
+                   family = font,
+                   size = 10,
+                   hjust = 0.5,
+                   color = "#2ca25f"),
+      
+      plot.caption = element_text(  
+                   family = font,
+                   size = 6,        
+                   hjust = 1),      
+      
+      axis.title = element_text(    
+                   family = font,   
+                   size = 10),      
+      
+      axis.text = element_text(     
+                   family = font,   
+                   size = 9),       
+      
+      axis.text.x = element_text(   
+                    margin=margin(5, b = 10))
+    )
+}
+
+```
+
+# Pizza Insights 🍕
+
+## Do more expensive pizza places rated higher?
+
+To answer the questions as visually as I can, I have created an animation of density graphs collecting the reviews of the Barstool community and Dave Portnoy (blogger, host) himself. It turns out that indeed pizza places in the second price level are higher rated than Level 0 and 1, but the distribution of Level 3 scores does not follow the pattern because of the marginal differences between the reviews of the community and Dave. This can be attributed to the higher expectations which result in Dave giving harsher ratings than the community for services asking for more.
+
+```{r}
+
+cols <- c("Community" = '#d7191c', "Dave" = '#2c7bb6')
+
+g1 <- ggplot() +
+  geom_density(data = pizza_barstool[ review_stats_community_average_score>0],aes(review_stats_community_average_score, fill='Community'), alpha = 0.25) +
+  geom_density(data = pizza_barstool[review_stats_dave_average_score>0], aes(review_stats_dave_average_score, fill='Dave'), alpha = 0.25) +
+  annotation_raster(logo, ymin = 0.7, ymax = 1, xmin = 0, xmax = 2) +
+  scale_fill_manual(name="Reviewer", values = cols) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_nszoni() +
+  theme(legend.position = 'top')
+
+g1 + transition_states(price_level) +
+  labs(
+      title = paste("Distibution of Scores at Price Level {closest_state}"),
+      subtitle = "Aggregated average score: {round(mean(subset(pizza_barstool, price_level == {closest_state})$review_stats_all_average_score), 2)}",
+      x = "Mean pizza score",
+      y = "Density",
+      caption = "Source: Pizza Barstool")
+
+```
+
+## Scoring Habits
+
+### Custom histogram function
+
+For assembling several identical plots, I have stored a `ggplot` call in a function with my theme customization which I can use for plotting multiple variables.
+
+```{r}
+#function for plotting multiple histograms
+
+review_histograms<- function(df, var, lab){
+
+  ggplot(df, aes_string(as.name(var)))+
+    geom_histogram(bins=15, fill = "#2ca25f", size = 0.25, alpha=0.8)+
+    labs(x = lab,
+         y = "Count")+
+    theme_nszoni()+
+    theme(legend.position = "top",
+          legend.box = "vertical",
+          legend.text = element_text(size = 5),
+          legend.title = element_text(size = 5, face = "bold"),
+          legend.key.size = unit(x = 0.4, units = "cm")
+    )
+  
+}
+
+```
+
+### Distribution of Average Rating Scores
+
+I have used `ggarrange` for sub-plotting review histograms of each reviewer group. Dave is somewhat stricter than the community's voice as I have mentioned earlier. The number of restaurants having a critique as a reviewer was limited to a few observations, that's why it is hard to make any conclusion from the underlying distribution.
+
+```{r}
+
+p1 <- review_histograms(filter(pizza_barstool,review_stats_all_average_score>0) , "review_stats_all_average_score", "All average score")
+p2 <- review_histograms(filter(pizza_barstool,review_stats_community_average_score>0), "review_stats_community_average_score", "Community average score")
+p3 <- review_histograms(filter(pizza_barstool,review_stats_critic_average_score>0), "review_stats_critic_average_score", "Critic average score")
+p4 <- review_histograms(filter(pizza_barstool,review_stats_dave_average_score>0), "review_stats_dave_average_score", "Dave average score")
+
+g_interactions <- ggarrange(p1, p2, p3, p4, nrow=2, ncol=2)
+
+title <- expression(atop(bold("Figure 1: Average Rating Scores"), scriptstyle("Pizza places in the US reviewed my the community, critics, and Dave Portnoy (blogger)")))
+annotate_figure(g_interactions,top = text_grob(title, color = "#2ca25f", face = "bold", size = 14))
+
+grid::grid.raster(logo, x = 0.01, y = 0, just = c('left', 'bottom'), width = unit(0.5, 'inches'))
+
+```
+
+## Most Visited Pizza Places in the US
+
+In my third figure, I chose to show the average rating of the top 5 pizza places in terms of reviews received. I assume that these are the most frequently visited pizza restaurants in the US. New York and Chicago pizza places are the most renowned ones in the US. The number of reviews on each restaurant likely correlates with the state-wise population. 
+
+```{r}
+
+top5places <- pizza_barstool[order(-pizza_barstool$provider_review_count)][1:5]
+
+ggplot(top5places) +
+  geom_bar(aes(reorder(name, provider_review_count), provider_review_count, fill=city), stat = "summary", fun = "mean") +
+  theme_nszoni() +
+  coord_flip() +
+  labs(title = "Figure 2.: Most Popular Pizza Places",
+       subtitle = "New York and Chicago leads the way.",
+       y = "No. reviews",
+       x = "",
+       caption = "Source: Barstool Pizza Reviews",
+       fill = "Location") +
+  scale_fill_manual(values=c('#a6cee3','#1f78b4','#b2df8a','#33a02c'))
+
+grid::grid.raster(logo, x = 0.01, y = 0, just = c('left', 'bottom'), width = unit(1, 'inches'))
+
+```
+
+## State-wise Price Differences 
+
+To see the average price difference between regions, I calculated the average price of the restaurant, grouped the average by state level, and categorized them to price groups based on the distribution. The highest average prices can be seen on the West Coast (California, Arizona), in the middle states, and on the East Coast (North Carolina) as well. Cheaper ones are more concentrated on the Western side of the country.
+
+```{r}
+
+pizza_datafiniti[, ':='(average_price = (price_range_min + price_range_max)/2,
+                 state = province)] 
+
+#average price per state
+price_per_state <- pizza_datafiniti[, .(avg_price = mean(average_price, na.rm=T)), by=state]
+
+#binning average prices
+price_per_state[, ':='(price_group = ifelse(avg_price < 14, 'Cheap', ifelse(avg_price > 14 & avg_price < 18, 'Mediocre', 'Expensive')))] 
+
+#relevel
+price_per_state$price_group <- factor(price_per_state$price_group, levels=c("Cheap", "Mediocre", "Expensive"))
+
+library(usmap)
+plot_usmap(data = price_per_state, regions = "states", values = "price_group") +
+  scale_fill_brewer(
+    palette = "Greens",
+    aesthetics = "fill",
+    na.value = "grey50",
+    drop = FALSE
+  ) +
+  theme_nszoni() +
+  labs(
+    title = 'Figure 3.: Average Pizza Prices in the US',
+    subtitle = 'Cheaper pizza on the west coast',
+    x = '',
+    y = '',
+    fill = 'Price Group',
+    caption = 'Source: Pizza Datafiniti'
+  ) +
+  theme(legend.position = "right",
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank())
+
+grid::grid.raster(logo, x = 0.01, y = 0, just = c('left', 'bottom'), width = unit(1, 'inches'))
+
+```
+
+## Pizza Pool 🏊
+
+To close this quick-fire analysis off, I have created an interactive map with the `leaflet` package. I have added popup details on the price group, and address. I have linked each address to their own Google Maps URL and made it clickable.
+
+```{r}
+
+url <- "https://tinyurl.com/y7bmvemr"
+pizza <-  makeIcon(url, url, 24, 24)
+
+pizza_datafiniti[, link := paste0('http://www.google.com/maps/place/', latitude, ',', longitude)]
+
+pizza_datafiniti[, price_group := ifelse(average_price < 14, 'Cheap', ifelse(average_price > 14 & average_price < 18, 'Mediocre', 'Expensive'))]
+
+datafiniti_map <- leaflet::leaflet(pizza_datafiniti, width = "100%") %>% addTiles()
+datafiniti_map %>% addMarkers(lng = ~longitude, lat = ~latitude, icon=pizza,
+                            popup = ~paste0(name, "<br/>Price: ", price_group, "<br/>Address: ", paste0('<a href = ', link, '> ', address ,' </a>')))
+
+```
+
+# Summary
+
+In this short publication, I have shown you many possible ways to play around with your data, especially spatial data. It has many limitations on how we can interpret the patterns we see on the figures, therefore, please approach this analysis very carefully. There is also a large imbalance on which states have records on restaurants as New York almost owns 50% of the data. All things considered, I hope you enjoyed this as much as I and learned something useful not only on the US market but also on visualization best practices. 
