@@ -136,7 +136,7 @@ g1 <- ggplot() +
 
 g1 + transition_states(price_level) +
   labs(
-      title = paste("Distibution of Scores at Price Level {closest_state}"),
+      title = paste("Figure 1: Distibution of Scores at Price Level {closest_state}"),
       subtitle = "Aggregated average score: {round(mean(subset(pizza_barstool, price_level == {closest_state})$review_stats_all_average_score), 2)}",
       x = "Mean pizza score",
       y = "Density",
@@ -184,7 +184,7 @@ p4 <- review_histograms(filter(pizza_barstool,review_stats_dave_average_score>0)
 
 g_interactions <- ggarrange(p1, p2, p3, p4, nrow=2, ncol=2)
 
-title <- expression(atop(bold("Figure 1: Average Rating Scores"), scriptstyle("Pizza places in the US reviewed my the community, critics, and Dave Portnoy (blogger)")))
+title <- expression(atop(bold("Figure 2: Average Rating Scores"), scriptstyle("Pizza places in the US reviewed my the community, critics, and Dave Portnoy (blogger)")))
 annotate_figure(g_interactions,top = text_grob(title, color = "#2ca25f", face = "bold", size = 14))
 
 grid::grid.raster(logo, x = 0.01, y = 0, just = c('left', 'bottom'), width = unit(0.5, 'inches'))
@@ -203,7 +203,7 @@ ggplot(top5places) +
   geom_bar(aes(reorder(name, provider_review_count), provider_review_count, fill=city), stat = "summary", fun = "mean") +
   theme_nszoni() +
   coord_flip() +
-  labs(title = "Figure 2.: Most Popular Pizza Places",
+  labs(title = "Figure 3: Most Popular Pizza Places",
        subtitle = "New York and Chicago leads the way.",
        y = "No. reviews",
        x = "",
@@ -243,7 +243,7 @@ plot_usmap(data = price_per_state, regions = "states", values = "price_group") +
   ) +
   theme_nszoni() +
   labs(
-    title = 'Figure 3.: Average Pizza Prices in the US',
+    title = 'Figure 4: Average Pizza Prices in the US',
     subtitle = 'Cheaper pizza on the west coast',
     x = '',
     y = '',
